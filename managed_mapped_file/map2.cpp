@@ -109,7 +109,7 @@ int main(int argc, char** argv) {
     charAllocator)));
 
   // print out the data vector
-  for (auto& w : *data)
+  for (auto const& w : *data)
     std::cout << w <<std::endl;
 
   return 0;
