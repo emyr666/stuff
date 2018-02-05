@@ -98,10 +98,15 @@ int main(int argc, char** argv) {
   CharAllocator charAllocator(m_file.get_segment_manager());
   SharedStringAllocator sharedStringAllocator(m_file.get_segment_manager());
 
-  // look for data vector in mapped file, create if not there
+  // look for shared string vector called "DATA" in mapped file, create if not there
+  // so first time program is run it will just create the vector and populate it with one word.
+  // subsequent invocations of the program will apend one word to the list.
   SharedStringVector *data = m_file.find_or_construct<SharedStringVector>("DATA")(sharedStringAllocator);
 
-  // append random word to the data vector
+  // append random word to the data vector, use move semantics to avoid a second deep copy
+  // of the word when pushing it into the vector i.e. we have to do a copy when constructing the
+  // word in shared memory as a copy of the word in the wordlist in main memory, but we don't do yet
+  // another copy when putting that shared-memory word into the shared-memory vector
   std::string s=get_random_word();
   data->push_back(boost::move(SharedString(
     s.c_str(),
