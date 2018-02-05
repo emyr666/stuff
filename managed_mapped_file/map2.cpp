@@ -103,11 +103,10 @@ int main(int argc, char** argv) {
 
   // append random word to the data vector
   std::string s=get_random_word();
-  SharedString word(
+  data->push_back(boost::move(SharedString(
     s.c_str(),
     s.size(),
-    charAllocator);
-  data->push_back(boost::move(word));
+    charAllocator)));
 
   // print out the data vector
   for (auto& w : *data)
