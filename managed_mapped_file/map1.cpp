@@ -5,3 +5,23 @@
 // up seems to be 8 bytes which presumably is some kind of structure to allow
 // programs to hook in to the data in the file (if any!)
 
+#include <iostream>
+
+#include <boost/interprocess/managed_mapped_file.hpp>
+
+namespace bip = boost::interprocess;
+
+int main(int argc, char** argv) {
+
+  if (argc != 2) {
+    std::cerr << "Usage : map1 <db file>" << std::endl;
+    return -1;
+  }
+
+  static bip::managed_mapped_file m_file(
+    bip::open_or_create,
+    argv[1],
+    50ul*1024*1024*1024);
+
+  return 0;
+}

@@ -1,27 +1,117 @@
 // create a managed_mapped_file backed up to data.bin
-// make it about 50GB in size. Can use ls -l and du to see the
-// allocated size of the file and how much space it actually takes up
-// on disk. should find that the allocated size is 50GB but the space taken
-// up seems to be 8 bytes which presumably is some kind of structure to allow
-// programs to hook in to the data in the file (if any!)
+// make it about 50GB in size.
+// put random words from a wordlist into it and print it
 
 #include <iostream>
+#include <fstream>
+#include <string>
+#include <vector>
+#include <random>
 
+#include <boost/interprocess/allocators/allocator.hpp>
 #include <boost/interprocess/managed_mapped_file.hpp>
+#include <boost/interprocess/containers/string.hpp>
+#include <boost/interprocess/containers/vector.hpp>
+#include <boost/move/move.hpp>
 
+// namesaces, typedefs etc.
 namespace bip = boost::interprocess;
+typedef bip::managed_mapped_file::segment_manager SegmentManager;
+typedef bip::allocator<char, SegmentManager> CharAllocator;
+typedef bip::basic_string<char, std::char_traits<char>, CharAllocator> SharedString;
+typedef bip::allocator<SharedString, SegmentManager> SharedStringAllocator;
+typedef bip::vector<SharedString, SharedStringAllocator> SharedStringVector;
 
+// global wordlist
+std::vector<std::string> wordlist;
+
+/////////////////////////////////////////////////////////////////////////////
+template<class T = std::mt19937, std::size_t N = T::state_size>
+auto ProperlySeededRandomEngine () -> typename std::enable_if<!!N, T>::type {
+/////////////////////////////////////////////////////////////////////////////
+// seed a mersenne twister
+    typename T::result_type random_data[N];
+    std::random_device source;
+    std::generate(std::begin(random_data), std::end(random_data), std::ref(source));
+    std::seed_seq seeds(std::begin(random_data), std::end(random_data));
+    T seededEngine (seeds);
+    return seededEngine;
+}
+
+// global random number stuff
+auto mt=ProperlySeededRandomEngine();
+std::uniform_real_distribution<> U(0.0, 1.0);
+
+///////////////////////////////////////
+void create_wordlist(char* word_file) {
+///////////////////////////////////////
+// create the wordlist just want 4-7 letter words and ones that don't contain an apostrophe
+  std::string apostrophe="'";
+  std::ifstream ifs(word_file);
+  if (ifs.is_open()) {
+    std::string line;
+    while ( ifs.good() ) {
+      std::getline (ifs,line);
+      std::transform(
+        line.begin(),
+        line.end(),
+        line.begin(),
+        ::tolower);
+        if ((3 < line.size()) && (line.size() < 8)) {
+          auto found=line.find(apostrophe);
+          if (found == std::string::npos) {
+            wordlist.push_back(line);
+          }
+        }
+    }
+  }
+  ifs.close();
+}
+
+////////////////////////////////
+std::string& get_random_word() {
+////////////////////////////////
+// get a random word from the wordlist
+
+  unsigned int idx=static_cast<unsigned int>(U(mt)*wordlist.size());
+  return wordlist[idx];
+}
+
+/////////////////////////////////
 int main(int argc, char** argv) {
+/////////////////////////////////
 
-  if (argc != 2) {
-    std::cerr << "Usage : map1 <db file>" << std::endl;
+  if (argc != 3) {
+    std::cerr << "Usage : map2 <wordlist file>  <db file>" << std::endl;
     return -1;
   }
 
+  create_wordlist(argv[1]);
+
+  // sort out the mapped file
   static bip::managed_mapped_file m_file(
     bip::open_or_create,
-    argv[1],
+    argv[2],
     50ul*1024*1024*1024);
+
+  // create allocator instances
+  CharAllocator charAllocator(m_file.get_segment_manager());
+  SharedStringAllocator sharedStringAllocator(m_file.get_segment_manager());
+
+  // look for data vector in mapped file, create if not there
+  SharedStringVector *data = m_file.find_or_construct<SharedStringVector>("DATA")(sharedStringAllocator);
+
+  // append random word to the data vector
+  std::string s=get_random_word();
+  SharedString word(
+    s.c_str(),
+    s.size(),
+    charAllocator);
+  data->push_back(boost::move(word));
+
+  // print out the data vector
+  for (auto& w : *data)
+    std::cout << w <<std::endl;
 
   return 0;
 }
