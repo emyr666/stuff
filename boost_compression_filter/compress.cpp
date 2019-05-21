@@ -1,11 +1,17 @@
-#include <boost/iostreams/filter/zlib.hpp>
+#include <boost/iostreams/filter/lzma.hpp>
 #include <boost/iostreams/filtering_streambuf.hpp>
+#include <boost/iostreams/traits.hpp>
+#include <boost/iostreams/device/file.hpp>
+#include <boost/iostreams/copy.hpp>
 #include <iostream>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <regex>
 #include <random>
+
+namespace io = boost::iostreams;
 
 int main() {
 
@@ -33,14 +39,20 @@ int main() {
     } 
   } 
 
-  // print 100 random words from the
-  // wordlist
+  io::filtering_streambuf<io::output> out;
+  out.push(io::lzma_compressor());
+  io::file_sink ofs("output.xz");
+  out.push(ofs);
+  std::stringstream ss;
+  io::copy(ss,out);
+
+  // print 100 random words from the wordlist
   std::random_device rd;
   std::mt19937 mt(rd());
   std::uniform_int_distribution<int> dist(0, word_list.size()-1);
 
   for (int i=0; i<16; ++i) {
-    std::cout << word_list[dist(mt)] << std::endl;
+    ss << word_list[dist(mt)] << std::endl;
   }
 
   return 0;
