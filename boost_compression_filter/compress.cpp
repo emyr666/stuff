@@ -1,8 +1,6 @@
 #include <boost/iostreams/filter/lzma.hpp>
-#include <boost/iostreams/filtering_streambuf.hpp>
-#include <boost/iostreams/traits.hpp>
+#include <boost/iostreams/filtering_stream.hpp>
 #include <boost/iostreams/device/file.hpp>
-#include <boost/iostreams/copy.hpp>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -39,12 +37,10 @@ int main() {
     } 
   } 
 
-  io::filtering_streambuf<io::output> out;
+  io::filtering_ostream out;
   out.push(io::lzma_compressor());
   io::file_sink ofs("output.xz");
   out.push(ofs);
-  std::stringstream ss;
-  io::copy(ss,out);
 
   // print 100 random words from the wordlist
   std::random_device rd;
@@ -52,7 +48,7 @@ int main() {
   std::uniform_int_distribution<int> dist(0, word_list.size()-1);
 
   for (int i=0; i<16; ++i) {
-    ss << word_list[dist(mt)] << std::endl;
+    out << word_list[dist(mt)] << std::endl;
   }
 
   return 0;
