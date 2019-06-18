@@ -1,21 +1,6 @@
 // create a managed_mapped_file backed up to data.bin
 // make it about 50GB in size.
-
-// create a tree object which has a pointer to its root node and an int saying how many nodes in the tree
-
-// can call 'print' on a tree which should print it out using a lisp-style syntax
-// e.g. ( root ( child 1 ( child 3) ) child 2 )
-
-// a tree node is made up of..
-// a word
-// a vector of pointers to child nodes. note we need to use the boost interprocess offset_pointer
-// so that pointers are valid across invocations
-
-// first invocation just creates the tree and root node with no children
-// subsequent iterations will choose a random node in the tree and add a child to that node
-// with the 'word' part being set to a random word and the vector of children being empty
-
-// will print the tree at each invocation
+// put random words from a wordlist into it and print it
 
 #include <iostream>
 #include <fstream>
@@ -23,40 +8,23 @@
 #include <vector>
 #include <random>
 
+#include <functional>
+#include <boost/functional/hash.hpp>
+#include <boost/unordered_map.hpp>
 #include <boost/interprocess/allocators/allocator.hpp>
 #include <boost/interprocess/managed_mapped_file.hpp>
 #include <boost/interprocess/containers/string.hpp>
 #include <boost/interprocess/containers/vector.hpp>
-#include <boost/interprocess/offset_ptr.hpp>
 #include <boost/move/move.hpp>
-
-// forward reference of SharedTreeNode;
-class SharedTreeNode {
-  bip::offset_ptr<SharedTreeNode> 
-};
 
 // namesaces, typedefs etc.
 namespace bip = boost::interprocess;
-typedef bip::managed_mapped_file::segment_manager                      SegmentManager;
-typedef bip::allocator<void, SegmentManager>                           VoidAllocator;
-typedef bip::allocator<char, SegmentManager>                           CharAllocator;
-typedef bip::basic_string<char, std::char_traits<char>, CharAllocator> SharedString;
-
-template <typename T>
-using Ptr = bip::offset_ptr<T>;
-
-template <typename T>
-using SharedPointerVector = bip::vector< Ptr<T>, bip::allocator<Ptr<T>, SegmentManager>;
-
-// tree node class
-class SharedTreeNode {
-  SharedPointerVector<SharedTreeNode> children;
-  SharedString name;
-
-  SharedTreeNode(std::string s, CharAllocator a) {
-  
-  } 
-};
+typedef bip::managed_mapped_file::segment_manager SegmentManager;
+typedef std::string KeyType;
+typedef std::string MappedType;
+typedef std::pair<KeyType, MappedType> ValueType;
+typedef bip::allocator<ValueType, SegmentManager> ValueTypeAllocator;
+typedef boost::unordered_map < KeyType, MappedType, boost::hash<KeyType>,std::equal_to<KeyType>, ValueTypeAllocator> StringHashMap;
 
 // global wordlist
 std::vector<std::string> wordlist;
@@ -130,23 +98,21 @@ int main(int argc, char** argv) {
     argv[2],
     50ul*1024*1024*1024);
 
-  // create allocator instances
-  CharAllocator charAllocator(m_file.get_segment_manager());
-  SharedStringAllocator sharedStringAllocator(m_file.get_segment_manager());
+  //Construct a mapped file hash map.
+  //Note that the first parameter is the initial bucket count and
+  //after that, the hash function, the equality function and the allocator
+  StringHashMap *data = m_file.find_or_construct<StringHashMap>("DATA")
+    (3, boost::hash<KeyType>(), std::equal_to<KeyType>()
+         , m_file.get_allocator<ValueType>());
 
-  // look for data vector in mapped file, create if not there
-  SharedStringVector *data = m_file.find_or_construct<SharedStringVector>("DATA")(sharedStringAllocator);
+  // insert data into the hash map
+  std::string s1=get_random_word();
+  std::string s2=get_random_word();
+  data->insert(ValueType(s1,s2));
 
-  // append random word to the data vector
-  std::string s=get_random_word();
-  data->push_back(boost::move(SharedString(
-    s.c_str(),
-    s.size(),
-    charAllocator)));
-
-  // print out the data vector
+  // print out the data map
   for (auto const& w : *data)
-    std::cout << w <<std::endl;
+    std::cout << w.first << " : " << w.second << std::endl;
 
   return 0;
 }
