@@ -20,11 +20,15 @@
 // namesaces, typedefs etc.
 namespace bip = boost::interprocess;
 typedef bip::managed_mapped_file::segment_manager SegmentManager;
-typedef std::string KeyType;
-typedef std::string MappedType;
+typedef bip::allocator<char, SegmentManager> CharAllocator;
+typedef bip::basic_string<char, std::char_traits<char>, CharAllocator> SharedString;
+typedef bip::allocator<SharedString, SegmentManager> SharedStringAllocator;
+typedef SharedString KeyType;
+typedef SharedString MappedType;
 typedef std::pair<KeyType, MappedType> ValueType;
 typedef bip::allocator<ValueType, SegmentManager> ValueTypeAllocator;
-typedef boost::unordered_map < KeyType, MappedType, boost::hash<KeyType>,std::equal_to<KeyType>, ValueTypeAllocator> StringHashMap;
+typedef boost::unordered_map < KeyType, MappedType, boost::hash<KeyType>,std::equal_to<KeyType>, ValueTypeAllocator> SharedStringHashMap;
+typedef bip::allocator<SharedStringHashMap, SegmentManager> SharedStringHashMapAllocator;
 
 // global wordlist
 std::vector<std::string> wordlist;
@@ -98,21 +102,42 @@ int main(int argc, char** argv) {
     argv[2],
     50ul*1024*1024*1024);
 
+  // create allocator instances
+  CharAllocator charAllocator(m_file.get_segment_manager());
+  SharedStringAllocator sharedStringAllocator(m_file.get_segment_manager());
+  ValueTypeAllocator valueTypeAllocator(m_file.get_segment_manager());
+  SharedStringHashMapAllocator sharedStringHashMapAllocator(m_file.get_segment_manager());
+ 
   //Construct a mapped file hash map.
   //Note that the first parameter is the initial bucket count and
   //after that, the hash function, the equality function and the allocator
-  StringHashMap *data = m_file.find_or_construct<StringHashMap>("DATA")
+  SharedStringHashMap *data = m_file.find_or_construct<SharedStringHashMap>("DATA")
     (3, boost::hash<KeyType>(), std::equal_to<KeyType>()
-         , m_file.get_allocator<ValueType>());
+         , valueTypeAllocator);
 
   // insert data into the hash map
-  std::string s1=get_random_word();
-  std::string s2=get_random_word();
-  data->insert(ValueType(s1,s2));
+  for (int i=0; i<100000; i++) {
+    std::string s1=get_random_word();
+    std::string s2=get_random_word();
+
+    data->insert(ValueType(
+      boost::move(SharedString(
+        s1.c_str(),
+        s1.size(),
+        charAllocator)),
+      boost::move(SharedString(
+        s2.c_str(),
+        s2.size(),
+        charAllocator))));
+  }
 
   // print out the data map
-  for (auto const& w : *data)
+  int count = 0;
+  for (auto const& w : *data) {
     std::cout << w.first << " : " << w.second << std::endl;
+    count++;
+  }
+  std::cout << count << " items" << std::endl;
 
   return 0;
 }
